@@ -1,0 +1,11 @@
+flask
+flask-cors
+pandas
+numpy
+prophet
+scikit-learn
+python-dotenv
+flask-sqlalchemy
+flask-migrate
+marshmallow-sqlalchemy
+flask-marshmallow
