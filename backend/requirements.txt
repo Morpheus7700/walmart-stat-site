@@ -9,3 +9,5 @@ flask-sqlalchemy
 flask-migrate
 marshmallow-sqlalchemy
 flask-marshmallow
+Flask-Caching
+scipy
