@@ -37,6 +37,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
+        {% raw %}
         const { useState, useEffect, useRef } = React;
 
         const App = () => {
@@ -53,8 +54,8 @@
             const forecastChartRef = useRef(null);
 
             useEffect(() => {
-                fetch('/api/stores').then(res => res.json()).then(setStores);
-                fetch('/api/correlation').then(res => res.json()).then(setCorrelation);
+                fetch('/api/stores').then(res => res.json()).then(setStores).catch(e => console.error("Store fetch failed", e));
+                fetch('/api/correlation').then(res => res.json()).then(setCorrelation).catch(e => console.error("Corr fetch failed", e));
                 if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
                     setIsDark(true);
                     document.documentElement.classList.add('dark');
@@ -70,66 +71,128 @@
                 setLoading(true);
                 const storeParam = selectedStore === 'All' ? '' : `?store=${selectedStore}`;
                 
-                fetch(`/api/stats${storeParam}`).then(res => res.json()).then(data => {
-                    setStats(data);
-                    setLoading(false);
-                });
+                fetch(`/api/stats${storeParam}`)
+                    .then(res => {
+                        if (!res.ok) throw new Error("Stats API Error");
+                        return res.json();
+                    })
+                    .then(data => {
+                        setStats(data);
+                        setLoading(false);
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        setLoading(false);
+                    });
 
                 if (tab === 'overview') {
-                    fetch(`/api/chart${storeParam}`).then(res => res.json()).then(data => {
-                        const ctx = document.getElementById('mainChart').getContext('2d');
-                        if (chartRef.current) chartRef.current.destroy();
-                        chartRef.current = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: data.labels,
-                                datasets: [{
-                                    label: 'Weekly Sales',
-                                    data: data.data,
-                                    borderColor: '#0071ce',
-                                    borderWidth: 3,
-                                    fill: true,
-                                    backgroundColor: isDark ? 'rgba(0, 113, 206, 0.1)' : 'rgba(0, 113, 206, 0.05)',
-                                    tension: 0.4,
-                                    pointRadius: 0
-                                }]
-                            },
-                            options: { 
-                                responsive: true, 
-                                maintainAspectRatio: false, 
-                                plugins: { legend: { display: false } },
-                                scales: {
-                                    y: { grid: { color: isDark ? '#334155' : '#f1f5f9' }, ticks: { color: isDark ? '#94a3b8' : '#64748b' } },
-                                    x: { grid: { display: false }, ticks: { color: isDark ? '#94a3b8' : '#64748b' } }
+                    fetch(`/api/chart${storeParam}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            const ctx = document.getElementById('mainChart').getContext('2d');
+                            if (chartRef.current) chartRef.current.destroy();
+                            chartRef.current = new Chart(ctx, {
+                                type: 'line',
+                                data: {
+                                    labels: data.labels,
+                                    datasets: [{
+                                        label: 'Weekly Sales',
+                                        data: data.data,
+                                        borderColor: '#0071ce',
+                                        borderWidth: 3,
+                                        fill: true,
+                                        backgroundColor: isDark ? 'rgba(0, 113, 206, 0.1)' : 'rgba(0, 113, 206, 0.05)',
+                                        tension: 0.4,
+                                        pointRadius: 0
+                                    }]
+                                },
+                                options: { 
+                                    responsive: true, 
+                                    maintainAspectRatio: false, 
+                                    plugins: { legend: { display: false } },
+                                    scales: {
+                                        y: { grid: { color: isDark ? '#334155' : '#f1f5f9' }, ticks: { color: isDark ? '#94a3b8' : '#64748b' } },
+                                        x: { grid: { display: false }, ticks: { color: isDark ? '#94a3b8' : '#64748b' } }
+                                    }
                                 }
-                            }
-                        });
-                    });
+                            });
+                        })
+                        .catch(e => console.error("Chart fetch failed", e));
                 }
 
                 if (tab === 'forecast') {
-                    fetch(`/api/forecast${storeParam}`).then(res => res.json()).then(data => {
-                        const ctx = document.getElementById('forecastChart').getContext('2d');
-                        if (forecastChartRef.current) forecastChartRef.current.destroy();
-                        forecastChartRef.current = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: data.labels,
-                                datasets: [
-                                    { label: 'Forecast', data: data.forecast, borderColor: '#0071ce', borderWidth: 3, fill: false },
-                                    { label: 'Actual', data: data.actual, borderColor: '#cbd5e1', borderWidth: 2, fill: false, borderDash: [5, 5] }
-                                ]
-                            },
-                            options: { 
-                                responsive: true, 
-                                maintainAspectRatio: false,
-                                scales: {
-                                    y: { grid: { color: isDark ? '#334155' : '#f1f5f9' }, ticks: { color: isDark ? '#94a3b8' : '#64748b' } },
-                                    x: { grid: { display: false }, ticks: { color: isDark ? '#94a3b8' : '#64748b' } }
+                    fetch(`/api/forecast${storeParam}`)
+                        .then(res => {
+                            if (!res.ok) throw new Error("Forecast failed");
+                            return res.json();
+                        })
+                        .then(data => {
+                            const ctx = document.getElementById('forecastChart').getContext('2d');
+                            if (forecastChartRef.current) forecastChartRef.current.destroy();
+                            
+                            const alignedActual = new Array(data.labels.length).fill(null);
+                            data.historical_labels.forEach((label, idx) => {
+                                const targetIdx = data.labels.indexOf(label);
+                                if (targetIdx !== -1) alignedActual[targetIdx] = data.actual[idx];
+                            });
+
+                            forecastChartRef.current = new Chart(ctx, {
+                                type: 'line',
+                                data: {
+                                    labels: data.labels,
+                                    datasets: [
+                                        { 
+                                            label: 'AI Forecast', 
+                                            data: data.forecast, 
+                                            borderColor: '#0071ce', 
+                                            borderWidth: 2, 
+                                            fill: true,
+                                            backgroundColor: 'rgba(0, 113, 206, 0.05)',
+                                            pointRadius: 0,
+                                            tension: 0.1
+                                        },
+                                        { 
+                                            label: 'Historical Data', 
+                                            data: alignedActual, 
+                                            borderColor: '#10b981', 
+                                            borderWidth: 2, 
+                                            fill: false,
+                                            pointRadius: 0
+                                        }
+                                    ]
+                                },
+                                options: { 
+                                    responsive: true, 
+                                    maintainAspectRatio: false,
+                                    animation: false,
+                                    plugins: {
+                                        legend: { position: 'top', labels: { usePointStyle: true, font: { weight: 'bold' } } }
+                                    },
+                                    scales: {
+                                        y: { 
+                                            grid: { color: isDark ? '#334155' : '#f1f5f9' }, 
+                                            ticks: { 
+                                                color: isDark ? '#94a3b8' : '#64748b',
+                                                callback: (value) => '$' + (value / 1e6).toFixed(1) + 'M'
+                                            } 
+                                        },
+                                        x: { 
+                                            grid: { display: false }, 
+                                            ticks: { 
+                                                color: isDark ? '#94a3b8' : '#64748b',
+                                                maxRotation: 0,
+                                                autoSkip: true,
+                                                maxTicksLimit: 12
+                                            } 
+                                        }
+                                    }
                                 }
-                            }
+                            });
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            alert("Forecasting engine timed out or encountered an error. Please try a specific store.");
                         });
-                    });
                 }
             };
 
@@ -268,7 +331,7 @@
                                         <h3 className="text-xl font-extrabold text-navy dark:text-white tracking-tighter">AI Prediction Engine (Prophet)</h3>
                                         <p className="text-slate-400 text-xs font-bold uppercase mt-1">Machine Learning Analysis</p>
                                     </div>
-                                    <span className="px-4 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-[10px] font-bold uppercase">12-Week Outlook</span>
+                                    <span className="px-4 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full text-[10px] font-bold uppercase">Long-Term Forecast (thru 2026)</span>
                                 </div>
                                 <div className="h-[400px] lg:h-[500px]">
                                     <canvas id="forecastChart"></canvas>
@@ -318,6 +381,7 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
+        {% endraw %}
     </script>
 </body>
 </html>

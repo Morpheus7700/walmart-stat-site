@@ -96,16 +96,51 @@ def get_forecast():
         prophet_df = data.groupby('Date')['Weekly_Sales'].sum().reset_index()
         prophet_df.columns = ['ds', 'y']
         
-        model = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
-        model.fit(prophet_df)
+        # Calculate a realistic growth baseline
+        # The dataset shows very stable sales (~47M average for all stores).
+        # Compounding 3.5% over 14 years might be too aggressive for mature retail stores.
+        # We will use 2.5% (inflation + slight expansion) which is more realistic for same-store/stable groups.
+        last_date = prophet_df['ds'].max()
+        # Use the median of the last 6 months to avoid being skewed by outliers
+        recent_data = prophet_df.sort_values('ds').tail(26)
+        baseline_val = recent_data['y'].median()
         
-        future = model.make_future_dataframe(periods=12, freq='W')
+        synthetic_points = []
+        # Create yearly anchor points to maintain the trend without overshooting
+        for year in range(2013, 2027):
+            # 2.5% CAGR is more conservative and realistic for this specific data scale
+            growth_mult = (1.025) ** (year - 2012)
+            synthetic_date = pd.Timestamp(year=year, month=6, day=15)
+            synthetic_points.append({'ds': synthetic_date, 'y': baseline_val * growth_mult})
+        
+        guide_df = pd.DataFrame(synthetic_points)
+        full_df = pd.concat([prophet_df, guide_df]).sort_values('ds')
+
+        # Multiplicative seasonality is better for retail (spikes grow with volume)
+        model = Prophet(
+            yearly_seasonality=True, 
+            weekly_seasonality=False, 
+            daily_seasonality=False,
+            seasonality_mode='multiplicative',
+            changepoint_prior_scale=0.01 # Make it less flexible to follow the linear anchor trend
+        )
+        model.fit(full_df)
+        
+        target_date = pd.Timestamp('2026-12-31')
+        days_diff = (target_date - last_date).days
+        weeks_to_forecast = (days_diff // 7) + 1
+        
+        future = model.make_future_dataframe(periods=weeks_to_forecast, freq='W')
         forecast = model.predict(future)
+        
+        # Ensure we don't have negative predictions
+        forecast['yhat'] = forecast['yhat'].clip(lower=0)
         
         return jsonify({
             "labels": forecast['ds'].dt.strftime('%Y-%m-%d').tolist(),
             "forecast": forecast['yhat'].tolist(),
-            "actual": prophet_df['y'].tolist()
+            "actual": prophet_df['y'].tolist(),
+            "historical_labels": prophet_df['ds'].dt.strftime('%Y-%m-%d').tolist()
         })
     except Exception as e:
         print(traceback.format_exc())
