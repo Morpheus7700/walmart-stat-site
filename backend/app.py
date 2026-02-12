@@ -96,45 +96,45 @@ def get_forecast():
         prophet_df = data.groupby('Date')['Weekly_Sales'].sum().reset_index()
         prophet_df.columns = ['ds', 'y']
         
-        # Calculate a realistic growth baseline
-        # The dataset shows very stable sales (~47M average for all stores).
-        # Compounding 3.5% over 14 years might be too aggressive for mature retail stores.
-        # We will use 2.5% (inflation + slight expansion) which is more realistic for same-store/stable groups.
-        last_date = prophet_df['ds'].max()
-        # Use the median of the last 6 months to avoid being skewed by outliers
-        recent_data = prophet_df.sort_values('ds').tail(26)
-        baseline_val = recent_data['y'].median()
+        # 1. EXTRACT SEASONAL PATTERN (Weekly averages by month)
+        # We use this to make the "gap" years look like real Walmart data
+        prophet_df['month'] = prophet_df['ds'].dt.month
+        seasonal_pattern = prophet_df.groupby('month')['y'].mean().to_dict()
         
+        last_real_date = prophet_df['ds'].max()
+        baseline_val = prophet_df.sort_values('ds').tail(26)['y'].median()
+        
+        # 2. GENERATE SEASONAL SYNTHETIC DATA (2013 - 2025)
+        # Instead of 1 point/year, we add 12 points/year to keep the "rhythm"
         synthetic_points = []
-        # Create yearly anchor points to maintain the trend without overshooting
-        for year in range(2013, 2027):
-            # 2.5% CAGR is more conservative and realistic for this specific data scale
+        for year in range(2013, 2026):
             growth_mult = (1.025) ** (year - 2012)
-            synthetic_date = pd.Timestamp(year=year, month=6, day=15)
-            synthetic_points.append({'ds': synthetic_date, 'y': baseline_val * growth_mult})
+            for month in range(1, 13):
+                synthetic_date = pd.Timestamp(year=year, month=month, day=15)
+                # Apply historical month pattern + growth
+                val = seasonal_pattern.get(month, baseline_val) * growth_mult
+                synthetic_points.append({'ds': synthetic_date, 'y': val})
         
         guide_df = pd.DataFrame(synthetic_points)
-        full_df = pd.concat([prophet_df, guide_df]).sort_values('ds')
+        # Remove columns used for pattern extraction before concat
+        full_df = pd.concat([prophet_df[['ds', 'y']], guide_df]).sort_values('ds')
 
-        # Multiplicative seasonality is better for retail (spikes grow with volume)
         model = Prophet(
             yearly_seasonality=True, 
-            weekly_seasonality=False, 
-            daily_seasonality=False,
+            weekly_seasonality=True, 
             seasonality_mode='multiplicative',
-            changepoint_prior_scale=0.01 # Make it less flexible to follow the linear anchor trend
+            changepoint_prior_scale=0.02
         )
         model.fit(full_df)
         
+        # 3. FIX PERIOD CALCULATION (Only forecast until end of 2026)
+        new_last_date = full_df['ds'].max()
         target_date = pd.Timestamp('2026-12-31')
-        days_diff = (target_date - last_date).days
-        weeks_to_forecast = (days_diff // 7) + 1
+        days_to_forecast = (target_date - new_last_date).days
+        weeks_to_forecast = max(1, (days_to_forecast // 7) + 1)
         
         future = model.make_future_dataframe(periods=weeks_to_forecast, freq='W')
         forecast = model.predict(future)
-        
-        # Ensure we don't have negative predictions
-        forecast['yhat'] = forecast['yhat'].clip(lower=0)
         
         return jsonify({
             "labels": forecast['ds'].dt.strftime('%Y-%m-%d').tolist(),
