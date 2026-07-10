@@ -1,4 +1,4 @@
-# walmart-stat-site
+﻿# Walmart Forecast Dashboard
 
 > A Walmart sales analytics dashboard with Prophet-based forecasting, served by a Flask API and a React frontend.
 
