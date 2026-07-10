@@ -1,20 +1,22 @@
-# Walmart Analytics Pro (Enterprise Edition) 🏬📊
+# walmart-stat-site
 
-A high-performance analytics dashboard for Walmart sales data featuring AI-driven forecasting and real-time intelligence.
+> A Walmart sales analytics dashboard with Prophet-based forecasting, served by a Flask API and a React frontend.
 
-## 🚀 Features
-- **Unified Architecture:** Streamlined Flask backend serving a responsive React Single Page Application (SPA).
-- **Advanced Forecasting:** Integrated **Facebook Prophet** for 12-week sales forecasting at global and store levels.
-- **Market Correlation:** Real-time statistical analysis of economic indicators (CPI, Fuel Price, Unemployment).
-- **Modern UI/UX:** Built with React 18, Tailwind CSS, and Chart.js, featuring full Dark Mode support and touch-optimized charts.
+A containerised analytics app that forecasts Walmart sales and analyses their relationship to economic indicators, presented in an interactive dashboard.
 
-## 🛠️ Tech Stack
-- **Backend:** Python 3.9+, Flask, Pandas, Facebook Prophet
-- **Frontend:** React (via CDN), Tailwind CSS, Chart.js, Lucide Icons
-- **Deployment:** Docker & Docker Compose
+## Features
+- 12-week sales forecasting with Facebook Prophet (global and store level)
+- Statistical analysis against economic indicators (CPI, fuel price, unemployment)
+- Interactive charts with dark-mode support
+- Dockerised for one-command startup
 
-## ⚙️ Quick Start (Docker)
+## Tech Stack
+- **Backend:** Python, Flask, Pandas, Prophet, scikit-learn, SciPy
+- **Frontend:** React (via CDN), Tailwind CSS, Chart.js
+- **Deploy:** Docker + Docker Compose
+
+## Getting Started
 ```bash
 docker-compose up --build
 ```
-Access the dashboard at `http://localhost:5000`.
+Then open `http://localhost:5000`.
